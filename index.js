@@ -1,40 +1,18 @@
 import fs from "node:fs";
 import http from "node:http";
 
-import { Canvas, loadImage } from "skia-canvas";
-import { getPalette } from "colorthief";
+import { getRandomInt, ExtractColorPalette } from "./banner.js";
 
 const bannerDirContents = fs.readdirSync(process.env.FOLDER_NAME);
+
 const server = http.createServer();
-
-// https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Math/random
-function getRandomInt(min, max) {
-  const minCeiled = Math.ceil(min);
-  const maxFloored = Math.floor(max);
-  return Math.floor(Math.random() * (maxFloored - minCeiled) + minCeiled); // The maximum is exclusive and the minimum is inclusive
-}
-
-async function ExtractColorPalette(source) {
-  // load the img from the link, creates and draws the image onto a similarly sized canvas, then gets the 3-color palette as a buffer
-  if (!process.env.FOLDER_NAME) return ["#d7dae8", "#a2a8c6", "#c3c8de"];
-
-  const image = await loadImage(`${process.env.FOLDER_NAME}/${source}`);
-  const canvas = new Canvas(image.width, image.height);
-  const context = canvas.getContext("2d");
-  context.drawImage(image, 0, 0);
-
-  const returningPalette = await getPalette(await canvas.toBuffer(), {
-    colorCount: 3,
-  });
-
-  const hexPalette = [];
-  returningPalette.forEach((c) => hexPalette.push(c.hex()));
-
-  return hexPalette;
-}
+const proxyRegex =
+  /^\/internal\/proxy\/(?<folder>[^\/]+)\/(?<filename>[^\/]+\.png)$/; // gemini
 
 server.on("request", async (request, response) => {
-  if (request.method == "GET") {
+  if (request.method != "GET") return;
+  console.log(request.url);
+  if (request.url === "/internal/randomizer") {
     const randomBanner =
       bannerDirContents[getRandomInt(0, bannerDirContents.length)];
     const Banner_Palette = await ExtractColorPalette(randomBanner);
@@ -43,6 +21,37 @@ server.on("request", async (request, response) => {
     response.end(
       JSON.stringify({ name: randomBanner, palette: Banner_Palette }),
     );
+  } else if (request.url.includes("/internal/proxy")) {
+    const a = new URL(request.url, "https://bway.lol");
+    const matchesPattern = request.url.match(proxyRegex);
+
+    if (!matchesPattern) {
+      response.statusCode = 404;
+      response.appendHeader("Content-Type", "text/plain; charset=utf-8");
+      response.end("Proxied URL not found");
+    }
+    const { folder, filename } = matchesPattern.groups;
+
+    const proxied_fetch = await fetch(
+      `https://maimaidx-eng.com/maimai-mobile/img/${folder}/${filename}`,
+      {
+        method: "GET",
+        headers: {
+          "User-Agent":
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",
+          Accept: "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
+        },
+      },
+    );
+
+    const arrBuffer = await proxied_fetch.arrayBuffer();
+    const returnedBuffer = Buffer.from(arrBuffer);
+
+    response.statusCode = 200;
+    response.appendHeader("Access-Control-Allow-Origin", "*");
+    response.appendHeader("Content-Type", "image/png");
+    response.appendHeader("Cache-Control", "public, max-age=604800");
+    response.end(returnedBuffer);
   }
 });
 
