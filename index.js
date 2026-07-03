@@ -7,11 +7,11 @@ const bannerDirContents = fs.readdirSync(process.env.FOLDER_NAME);
 
 const server = http.createServer();
 const proxyRegex =
-  /^\/internal\/proxy\/(?<folder>[^\/]+)\/(?<filename>[^\/]+\.png)$/; // gemini
+  /^\/internal\/proxy\/(?:(?<folder>[^\/]+)\/)?(?<filename>[^\/?]+\.png)(?<query>\?.*)?$/; // gemini
 
 server.on("request", async (request, response) => {
   if (request.method != "GET") return;
-  console.log(request.url);
+
   if (request.url === "/internal/randomizer") {
     const randomBanner =
       bannerDirContents[getRandomInt(0, bannerDirContents.length)];
@@ -22,18 +22,18 @@ server.on("request", async (request, response) => {
       JSON.stringify({ name: randomBanner, palette: Banner_Palette }),
     );
   } else if (request.url.includes("/internal/proxy")) {
-    const a = new URL(request.url, "https://bway.lol");
     const matchesPattern = request.url.match(proxyRegex);
 
     if (!matchesPattern) {
       response.statusCode = 404;
       response.appendHeader("Content-Type", "text/plain; charset=utf-8");
       response.end("Proxied URL not found");
+      return;
     }
-    const { folder, filename } = matchesPattern.groups;
 
+    const { folder, filename, query } = matchesPattern.groups;
     const proxied_fetch = await fetch(
-      `https://maimaidx-eng.com/maimai-mobile/img/${folder}/${filename}`,
+      `https://maimaidx-eng.com/maimai-mobile/img${folder ? `/${folder}/` : "/"}${filename}${query ? `?${query}` : ""}`,
       {
         method: "GET",
         headers: {
@@ -52,6 +52,7 @@ server.on("request", async (request, response) => {
     response.appendHeader("Content-Type", "image/png");
     response.appendHeader("Cache-Control", "public, max-age=604800");
     response.end(returnedBuffer);
+    return;
   }
 });
 
