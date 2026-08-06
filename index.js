@@ -5,6 +5,10 @@ import { getRandomInt, ExtractColorPalette } from "./banner.js";
 
 const bannerDirContents = fs.readdirSync(process.env.FOLDER_NAME);
 
+/* const bannerDirContents = fs.readdirSync(
+  "/home/baconway/Documents/banner-random/placeholder/",
+);*/
+
 const server = http.createServer();
 const proxyRegex =
   /^\/internal\/proxy\/(?:(?<folder>[^\/]+)\/)?(?<filename>[^\/?]+\.png)(?<query>\?.*)?$/; // gemini
@@ -53,7 +57,40 @@ server.on("request", async (request, response) => {
     response.appendHeader("Cache-Control", "public, max-age=604800");
     response.end(returnedBuffer);
     return;
+  } else if (request.url.includes("/internal/video")) {
+    const FullURL = new URL(`https://bway.lol${request.url}`);
+
+    const videoURL_toFetch = FullURL.searchParams.get("video_link");
+
+    if (!videoURL_toFetch) {
+      response.statusCode = 404;
+      response.end("Video Link Not Provided");
+      return;
+    }
+
+    const encodedURL = decodeURI(videoURL_toFetch);
+
+    const videoResponse = await fetch(videoURL_toFetch, {
+      method: "GET",
+      headers: {
+        Accept: "video/mp4",
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",
+      },
+    });
+
+    const videoStream = Buffer.from(await videoResponse.arrayBuffer());
+
+    response.appendHeader("Access-Control-Allow-Origin", "*");
+    response.appendHeader("Content-Type", "video/mp4");
+    response.appendHeader("Cache-Control", "public, max-age=604800");
+    response.appendHeader("Content-Disposition", "inline");
+
+    response.statusCode = 200;
+    response.end(videoStream);
   }
 });
 
 server.listen(process.env.PORT);
+
+// server.listen(2020);
