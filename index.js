@@ -12,11 +12,38 @@ const bannerDirContents = fs.readdirSync(process.env.FOLDER_NAME);
 const server = http.createServer();
 const proxyRegex =
   /^\/internal\/proxy\/(?:(?<folder>[^\/]+)\/)?(?<filename>[^\/?]+\.png)(?<query>\?.*)?$/; // gemini
+const frameRegex = /[^/]+$/;
 
 server.on("request", async (request, response) => {
   if (request.method != "GET") return;
 
-  if (request.url === "/internal/randomizer") {
+  console.log(request.url);
+
+  if (request.url.includes("internal/frame")) {
+    const filenameFound = request.url.match(frameRegex);
+    console.log(request.url, filenameFound);
+    if (!filenameFound) {
+      response.statusCode = 404;
+      response.appendHeader("Content-Type", "text/plain; charset=utf-8");
+      response.end("Frame asset not found");
+      return;
+    }
+
+    const filename = filenameFound[0];
+    console.log(filename);
+
+    try {
+      response.statusCode = 200;
+      response.appendHeader("Content-Type", "image/png; charset=utf-8");
+      response.end(Buffer.from(fs.readFileSync(`/banners/${filename}`)));
+      return;
+    } catch (error) {
+      response.statusCode = 404;
+      response.appendHeader("Content-Type", "text/plain; charset=utf-8");
+      response.end("Frame asset not found");
+      return;
+    }
+  } else if (request.url === "/internal/randomizer") {
     const randomBanner =
       bannerDirContents[getRandomInt(0, bannerDirContents.length)];
     const Banner_Palette = await ExtractColorPalette(randomBanner);
@@ -92,5 +119,5 @@ server.on("request", async (request, response) => {
 });
 
 server.listen(process.env.PORT);
-
+console.log("Listening on port: ", process.env.PORT);
 // server.listen(2020);
